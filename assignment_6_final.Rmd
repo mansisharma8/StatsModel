@@ -1,0 +1,374 @@
+---
+title: "Statistical Models; Homework 6"
+author: "Mansi Sharma"
+date: "2023-11-22"
+output: pdf_document
+---
+
+## Question 1: Implement k-fold cross-validation and sequential model selection for linear regression models.
+
+```{r}
+# Load the data
+library(MASS)
+dat = Boston[, -c(4, 9)]
+dat = dat[,c("crim","zn","nox","rm","dis","ptratio","black","lstat","medv")]
+x = dat[,!names(dat) %in% c('medv')]
+y <- data.frame(medv = dat$medv)
+#x <- Boston[, -c(4,9)]
+#y <- Boston[, 14]
+
+```
+
+## 1 (a)
+
+```{r}
+cv.lm <- function(x,y, k) {
+  # x is a matrix of predictors
+  # y is a vector of response
+  # k is the number of folds
+  # returns the mean squared error of the model
+  
+  
+  #dat_cv = dat[sample(n),]
+  n = nrow(x)
+  dat_cv = data.frame(x,y)
+  dat_cv = dat_cv[sample(n),]
+  #print(dat_cv)
+  folds <- cut(seq(1,n),breaks=k,labels=FALSE)
+  cv_error = rep(NA, k)
+  
+  # construct formula string
+  formula_string <- paste(paste(colnames(y), collapse = " + "),
+                          " ~", paste(colnames(x), collapse = " + "))
+  # convert formula string to formula object
+  formula_object <- as.formula(formula_string)
+  print(formula_object)
+  
+  #k is the number of folds
+  for (i in 1:k) 
+  {
+    #Creating train and validation subsets from folds
+    dat_train = dat_cv[folds != i,]
+    dat_val = dat_cv[folds == i,]
+    
+    #training model    
+    train_model = lm(formula_object, data = dat_train)
+    #train_model = lm(medv ~ crim + zn + nox + rm + dis + ptratio + black + lstat, data = dat_train)
+    pred_val = predict(train_model, newdata = dat_val)
+    
+    #Calculating cross validation error at ith fold
+    cv_error[i] = sqrt(mean((dat_val$medv - pred_val)^2))
+  }
+  
+  #return mean of CV error
+  return(mean(cv_error))
+}
+
+```
+
+```{r}
+#testing 
+cv.lm(x, y, 5)
+```
+
+
+```{r}
+#Using caret
+library(caret)
+cv.lm_with_caret <- function(x, y, k) {
+# x is a matrix of predictors
+# y is a vector of response
+# k is the number of folds
+# returns the mean squared error of the model
+n = nrow(x)
+dat_cv = data.frame(x,y)
+train_control <- trainControl(method = "cv",number = k)
+m_cv <- train(medv ~ ., data = dat_cv,
+method = "lm",
+trControl = train_control)
+print(m_cv)
+rmse <- m_cv$results$RMSE[length(m_cv$results$RMSE)]
+return(rmse)
+}
+cv.lm_with_caret(x, y, 5)
+
+```
+
+##Inference : 
+As we can see above, the cv.lm(x,y,k) function which calculates the k -fold cross validation root mean squared error stepwise and the cv.lm_with_caret(x,y,k) function which uses pre built library function to calculate the k -fold cross validation root mean squared error. We test our own function with the Boston data set selecting the required variables and giving k-folds. We observe that both the functions give almost same value that is 4.9, which validates the correctness of our function.
+
+## 1 (b)
+
+```{r}
+dat = Boston[, -c(4, 9)]
+dat = dat[,c("crim","zn","nox","rm","dis","ptratio","black","lstat","medv")]
+x = dat[,!names(dat) %in% c('medv')]
+y = dat$medv
+```
+
+```{r}
+SequentialSelection <- function(x, y, method) {
+# x is the design matrix
+# y is the response variable
+# method is a string indicating the selection criteria
+# initialize variables
+p <- ncol(x)
+n <- nrow(x)
+included <- c() # columns included in the model
+#excluded <- 1:p # columns excluded from the model
+cols = c(colnames(x))
+excluded <- c(colnames(x)) # columns excluded from the model
+#print("formula_object")
+#print(cols)
+intercept <- rep(1, n) # intercept only model
+models <- list(intercept)
+scores <- c()
+if(method == "ADJR2"){
+  # loop over columns
+  for (i in 1:p) {
+      best_score <- NULL
+      best_col <- NULL
+      # loop over excluded columns
+      for (j in excluded) {
+      # fit model with j-th column included
+      features = c(included, j)
+      # construct formula string
+      formula_string <- paste("y ~", paste(features, collapse = " + "))
+      # convert formula string to formula object
+      formula_object <- as.formula(formula_string)
+      #model <- lm(y ~ x[, c(included, j)])
+      # fit model with features from list
+      #print("formula_object")
+      #print(formula_object)
+      model <- lm(formula_object, data = x)
+      score <- summary(model)$adj.r.squared
+      # update best score and column
+      if (is.null(best_score) || score > best_score) {
+      best_score <- score
+      best_col <- j
+  }
+      }
+      # add best column to included columns and remove from excluded columns
+    included <- c(included, best_col)
+    excluded <- setdiff(excluded, best_col)
+    ## saving the best model
+    formula_string <- paste("y ~", paste(included, collapse = " + "))
+    formula_object <- as.formula(formula_string)
+    models[i] <- lm(formula_object, data = x)
+    scores[i] <- best_score
+    }
+}
+else {
+      #print("inside else")
+    # loop over columns
+    for (i in 1:p) {
+    best_score <- NULL
+    best_col <- NULL
+    # loop over excluded columns
+    for (j in excluded) {
+    # fit model with j-th column included
+    features = c(included, j)
+    # construct formula string
+    formula_string <- paste("y ~", paste(features, collapse = " + "))
+    # convert formula string to formula object
+    formula_object <- as.formula(formula_string)
+    #model <- lm(y ~ x[, c(included, j)])
+    # fit model with features from list
+    #print("formula_object")
+    #print(formula_object)
+    model <- lm(formula_object, data = x)
+    # compute score based on method
+    if (method == "AIC") {
+    score <- AIC(model)
+    } else if (method == "CV5") {
+    score <- mean(sapply(split(1:n, rep(1:5, each = n/5)), function(ind){
+    mean((y[ind] - predict(model, newdata = x[ind,]))^2)
+    }))
+    } else {
+    stop("Invalid method")
+    }
+    # update best score and column
+if (is.null(best_score) || score < best_score) {
+best_score <- score
+best_col <- j
+}
+}
+# add best column to included columns and remove from excluded columns
+included <- c(included, best_col)
+excluded <- setdiff(excluded, best_col)
+## saving the best model
+formula_string <- paste("y ~", paste(included, collapse = " + "))
+formula_object <- as.formula(formula_string)
+models[i] <- lm(formula_object, data = x)
+scores[i] <- best_score
+}
+}
+#print("scores")
+#print(scores)
+#print("models")
+#print(models)
+#print("models end")
+# choose best model based on method
+if (method == "ADJR2") {
+best_model <- models[[which.max(scores)]]
+} else if (method == "AIC") {
+best_model <- models[[which.min(scores)]]
+} else if (method == "CV5") {
+best_model <- models[[which.min(scores)]]
+} else {
+stop("Invalid method")
+}
+best_score = 0
+# return results
+if (method == "ADJR2"){
+best_score = max(scores)
+}
+else{
+best_score = min(scores)
+}
+print("Best Score")
+print(best_score)
+return(list(included = included, best_model = best_model, best_score = best_score))
+}
+
+```
+
+```{r}
+mod = SequentialSelection(x,y, "ADJR2" )
+
+```
+
+```{r}
+mod
+
+```
+
+
+```{r}
+mod$best_model[]
+
+```
+
+```{r}
+mod = SequentialSelection(x,y, "AIC" )
+
+```
+
+```{r}
+mod
+
+```
+
+```{r}
+mod$best_model[]
+
+```
+
+```{r}
+mod = SequentialSelection(x,y, "CV5" )
+
+```
+
+```{r}
+mod 
+
+```
+
+```{r}
+mod$best_model[]
+
+```
+
+##Inference :
+We see from the sequential method selection above that for all the 3 methods, AdjR2, CV5 and AIC it gives
+the best model from the selection. We can see from the values also that it performs reasonable well.
+
+
+
+## Question 2 : Consider a regression setting where the predictor variable is real valued and the goal is to fit a polynomial model. Specifically, we assume that x1,. . . ,xn are iid uniform in [0, 2pi] and conditional on these, y1, . . . ,yn are independent, with yi normal with mean sin(3xi) + xi and variance 1. Take n = 200 and set the maximum degree at 20. Perform simulations (at least 100 data instances) to compare the choice of degree by the sequential model selection methods in Problem 1. Produce plots of 3 example data instances and their best model fits according to different methods. Produce plots of the distribution of the polynomial degrees chosen by the different methods over all simulated instances. Offer comments on what you observe.
+
+```{r}
+data_generation <-function(degree = 20){
+n = 200
+x <- runif(n, 0, 2*pi)
+y <- rnorm(n, mean = sin(3*x) + x, sd = 1)
+return (list(x=x,y=y))
+}
+data = data_generation()
+x = data$x
+y= data$y
+x = list(x,x^2)
+names(x)<- c("x", paste0("x^", 2))
+typeof(x)
+```
+
+```{r}
+colnames(x)
+```
+
+```{r}
+x <- data.frame(x)
+colnames(x)
+```
+
+```{r}
+SequentialSelection(x,y, method = "CV5")
+```
+
+```{r}
+max_degree = 20
+methods = c("ADJR2", "AIC", "CV5")
+adj_deg = rep(0, 100)
+aic_deg = rep(0, 100)
+cv_deg = rep(0, 100)
+x_ =c()
+
+```
+
+```{r}
+#Knitting till 100 took a lot of time so we computed for less
+for(i in 1:1){
+  data = data_generation()
+  x_ = data$x
+  y_= data$y
+  X <- matrix(rep(x_, 20), ncol = 20)
+  for (i in 2:20) {
+    X[,i] <- X[,i-1] * x_
+    # Create a data frame with the matrix and set column names
+    x <- data.frame(X)
+    names(x) <- paste0("x", 1:20)
+  for (method in methods){
+    best_score = NULL
+    best_deg = NULL
+  for (deg in 2:max_degree){
+    #x = list(x_,x_ˆdeg)
+    #names(x)<- c("x", paste0("xˆ", 2))
+    #x <- data.frame(x)
+    #result = SequentialSelection(x,y, method = method)
+    result = SequentialSelection(x[,1:deg],y, method = method)
+    if (method == "ADJR2"){
+      best_score = max(best_score, result$best_score)
+      best_deg = deg
+    }
+    else{
+      best_score = min(best_score, result$best_score)
+      best_deg = deg
+    }
+  }
+    if (method == "ADJR2") {
+      adj_deg[i] <- best_deg
+    } else if (method == "AIC") {
+      aic_deg[i] <- best_deg
+    } else if (method == "CV5") {
+      cv_deg[i] <- best_deg
+    } else {
+      stop("Invalid method")
+    }
+  }
+    print(adj_deg[i])
+    print(aic_deg[i])
+    print(cv_deg)
+}
+}
+```
+

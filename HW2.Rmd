@@ -1,0 +1,207 @@
+---
+title: "Statistical models : Homework 2 "
+output: html_document
+author : " Mansi Sharma"
+date: "2023-10-24"
+---
+
+
+## **Question 1: Verification of Least Squares Coefficients**
+
+### a. Simulations on Least Squares Coefficients
+
+We begin by loading essential libraries:
+
+```{r}
+library(ggplot2)
+library(car) 
+require(car)
+```
+
+Creating a function, `coefficients_sample`, to compute the slope and intercept for a given sample size:
+
+```{r}
+coefficients_sample <- function(sample_num) {
+  x_vals = runif(sample_num, -1, 1) 
+  error = rnorm(sample_num, 0, 0.5)
+  y_vals = 1 + 2 * x_vals + error 
+  linear_fit = lm(y_vals ~ x_vals) 
+  coeff_values = coef(linear_fit)
+  
+  list("intercept" = coeff_values[1], "slope" = coeff_values[2])
+}
+
+iterations = c(50, 100, 200, 500)
+intercepts = list()
+slopes = list()
+
+for(i in 1:1000) {
+  for(n in iterations) {
+    model_values = coefficients_sample(50)
+    intercepts = append(intercepts, model_values$intercept)
+    slopes = append(slopes, model_values$slope)
+  }
+}
+```
+
+Visualizing the distribution of intercepts:
+
+```{r}
+qqnorm(unlist(intercepts))
+qqline(unlist(intercepts), col="yellow", lwd=2)
+```
+
+Visualizing the distribution of slopes:
+
+```{r}
+qqnorm(unlist(slopes))
+qqline(unlist(slopes), col="blue", lwd=2)
+```
+
+#### Joint Distribution of Slopes and Intercepts
+
+```{r}
+qplot(unlist(intercepts), unlist(slopes), geom='bin2d')
+```
+
+**Observation**: The marginal distributions show a linear trend. The joint distribution gives insights into the relationship between slope and intercept.
+
+### b. Further Simulations
+
+```{r}
+SampleSizes = c(50, 100, 200, 500)
+DegreesFreedom = c(2, 5, 10, 20, 50)
+intercepts_b = list()
+slopes_b = list()
+
+sample_with_error <- function(size, err) {
+  x_data = runif(size, -1, 1)
+  y_data = 2 * x_data + 1 + err
+  model = lm(y_data ~ x_data)
+  coeff = coef(model)
+  
+  list("intercept" = coeff[1], "slope" = coeff[2])
+}
+
+for(df in DegreesFreedom) { 
+  for(s in SampleSizes) {
+    for(j in 1:1000) {
+      error_sample = rt(s, df)
+      coefficients = sample_with_error(s, error_sample)
+      intercepts_b = append(intercepts_b, coefficients$intercept)
+      slopes_b = append(slopes_b, coefficients$slope)
+    }
+    # Visualizations
+    qqnorm(unlist(intercepts_b))
+    qqline(unlist(intercepts_b), col="yellow", lwd=2)
+    qqnorm(unlist(slopes_b))
+    qqline(unlist(slopes_b), col="blue", lwd=2)
+
+    print(qplot(unlist(intercepts_b), unlist(slopes_b), geom='bin2d'))
+  }
+}
+
+```
+
+**Insight**: As the degrees of freedom increase, the distribution of least squares coefficients starts resembling a normal distribution more closely. Sample size also plays a role in stabilizing this distribution.
+
+## **Question 2: Diagnostics Using Boston Dataset**
+
+We'll use the Boston dataset from the MASS package:
+
+```{r}
+library(MASS)
+data("Boston")
+filtered_data = subset(Boston, select =-c(4,9))
+```
+
+Fitting the linear model:
+
+```{r}
+linear_model = lm(medv ~ ., data=filtered_data)
+```
+
+Visual diagnostics:
+
+```{r}
+plot(linear_model, which=1, pch=16)
+```
+
+Inspecting residuals:
+
+```{r}
+residualPlots(linear_model)
+```
+
+### 1) Evaluating the Mean
+
+```{r}
+mean(linear_model$residuals)
+```
+
+```{r}
+avPlots(linear_model)
+```
+
+**Note**: The residual plots indicate a deviation from the expected mean of zero, especially for variables like crim, dis, tax, black, and lstat.
+
+### 2) Variance Examination
+
+```{r}
+plot(linear_model, which=1, pch=16)
+```
+
+```{r}
+residualPlots(linear_model)
+```
+
+```{r}
+avPlots(linear_model)
+```
+
+**Observation**: The scatter of residuals suggests heteroscedasticity, especially in variables like age, crim, zn, industries, dis, tax, and lstat.
+
+### 3) Checking Normality
+
+```{r}
+plot(linear_model, which=2, cex=1, pch=16)
+```
+
+```{r}
+qqPlot(linear_model)
+```
+
+**Conclusion**: Residuals don't seem to adhere to normality, especially the extreme values.
+
+### b) Detecting Outliers in Predictors:
+
+```{r}
+plot(hatvalues(linear_model), type='h', col="blue", ylab="Hat Values", main="Hat values")
+threshold = 12 ; num_entries = 506
+abline(h = 2 * (threshold + 1) / num_entries, lty=2)
+```
+
+```{r}
+sort(hatvalues(linear_model), decreasing = TRUE)[1]
+```
+
+### c) Identifying Outliers in Response:
+
+```{r}
+plot(abs(rstudent(linear_model)), type='h', col="blue", ylab="Externally Studentized Residuals")
+abline(h = qt(.95, num_entries - threshold - 2), lty=2)
+```
+
+```{r}
+sort(rstudent(linear_model), decreasing = TRUE)[1]
+```
+
+### d) Pinpointing Influential Observations:
+
+```{r}
+plot(linear_model, which=4, col="blue", lwd=2)
+abline(h = 1, lty=2)
+```
+
+**Note**: The above plots provide insights into potential outliers and influential observations in the dataset.
+

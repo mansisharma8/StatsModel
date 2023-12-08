@@ -1,0 +1,148 @@
+---
+title: "Statistical Models: Homework 3"
+author: "Mansi Sharma"
+date: "2023-11-01"
+output: pdf_document
+---
+
+## Question 1
+
+```{r}
+# Function for matrix element generation
+matrix_element <- function(r, c) r^(c-1)
+
+# Initializing an empty list to store results
+results_list <- c()
+
+# Function to calculate the condition number
+calc_condition_number <- function(n_val, plot_color="blue"){
+  condition_numbers <- c()
+  i <- n_val
+  # Looping through values from 1 to 20
+  for (j in 1:20){
+    x_vals <- seq(from = 0, to = 1, by = (1/(i+1)))[2:i+1]
+    matrix_rows <- x_vals
+    matrix_cols <- 1:j+1
+    design_matrix <- outer(matrix_rows, matrix_cols, FUN=matrix_element)
+    svd_result <- svd(design_matrix)
+    condition_number <- max(svd_result$d)/min(svd_result$d)
+    condition_numbers <- append(condition_numbers, log(condition_number))
+  }
+  # Plotting the result
+  plot(condition_numbers, col=plot_color)
+  title(main = paste('Condition Number Plot for n =', n_val), sub = "For each p from 1 to 20",
+        cex.main = 2, font.main= 3, col.main= "black")
+  results_list <<- append(results_list, condition_numbers)
+}
+
+# Plotting for different values of n
+calc_condition_number(30, "blue")
+calc_condition_number(50, "green")
+calc_condition_number(100, "cyan")
+calc_condition_number(200, "red")
+calc_condition_number(500, "magenta")
+calc_condition_number(1000, "orange")
+
+```
+### Inference of question 1
+
+The plots above illustrate the condition numbers for polynomial degrees ranging from 1 to 20 and for evenly distributed values of xi in the interval (0, 1), where n varies among {30, 50, 100, 200, 500, 1000}. The patterns appear consistent across different values of 
+n, indicating that the condition numbers are stable across these ranges.
+
+The condition number of the design matrix increases exponentially with the degree p of the polynomial. Regardless of the number of data points (n), the condition number behaves similarly for the same value of p.
+
+It's important to note that the condition number and the number of data points are influenced by various factors such as data distribution, the selection of basis functions, and the scaling of the design matrix. The larger the polynomial degree, the more parameters there are to fit, which makes the design matrix larger and more sensitive to perturbations.
+
+## Question 2
+
+```{r}
+# Defining Piecewise constant function
+piecewiseConstantFit = function(x, y, L, plot=TRUE){
+  num_intervals = 2^L
+  interval_length = (range(x)[2]-range(x)[1])/num_intervals
+  split_points = seq(from = range(x)[1], to = range(x)[2], by =interval_length)
+  points = rep(0,2*num_intervals)
+  values = rep(0,2*num_intervals)
+  # Looping over intervals
+  for (i in 1:num_intervals){
+    interval_index = (split_points[i] < x)&(x <= split_points[i+1])
+    if (length(interval_index[interval_index==TRUE]) !=0){
+      model_fit = lm(y[interval_index] ~ 1)
+      points[2*i-1] = split_points[i]
+      points[2*i] = split_points[i+1]
+      values[2*i-1] = coef(model_fit)
+      values[2*i] = coef(model_fit)  
+    }
+    else{
+      points[2*i-1] = split_points[i]
+      points[2*i] = split_points[i+1]
+      values[2*i-1] = values[2*i-3]
+      values[2*i] = values[2*i-2]
+    }
+    
+  }
+  if (plot){
+    if (L==2){
+      lines(points, values, col="blue", lwd = 3)  
+    }
+    else if (L==3){
+      lines(points, values, col="green", lwd = 3)  
+    }
+    if (L==4){
+      lines(points, values, col="red", lwd = 3)  
+    }
+  }
+}
+
+
+
+
+
+```
+
+## a
+Write a function piecewiseConstant(x, y, L, plot = TRUE) taking in a one dimensional predictor variable x with values in [0, 1] and a response y, and fits a piecewise constant model (by least squares) on 2L intervals of equal length partitioning the unit interval (L is a nonnegative integer) in the form of a numerical vector of length 2L, with the option of producing a scatterplot with the fit overlaid.
+```{r}
+# For part 2a
+x_vals = runif(100, min=0, max=1)
+y_vals = x_vals^3
+plot(y_vals~x_vals)
+piecewiseConstantFit(x_vals, y_vals, 2, TRUE)
+```
+### Inference of Question 2a
+Fitting a piecewise constant model means we have different regression models for each of the intervals. Instead of using one model for the entire dataset, we can analyze each interval through its corresponding regression model.
+
+Piecewise approximation implies that each piece corresponds to a constant value over a specific interval. This approach allows for capturing localized patterns and variations within different segments of the data.
+
+
+## b
+Apply your function to explaining City Mpg as a piecewise constant function of Horsepower in the 04cars dataset. Produce a single scatterplot, with lines corresponding to the fit with L = 2 (blue), L = 3 (green), and L = 4 (red). Add a legend, etc, so it looks ‘nice’.
+```{r}
+#Loading the cars dataset
+#setwd("C:/Users/mansi/OneDrive/Desktop/StatModel")# 
+load("C:/Users/mansi/OneDrive/Desktop/StatModel/04cars.version2.rda")
+
+data_cleaned = dat
+dat = data_cleaned[complete.cases(data_cleaned),]
+#plotting for different values of L
+plot(dat$Horsepower,dat$City_MPG, pch = 16, main="Piecewise constant fit",
+     cex = 1, xlab="Horsepower", ylab="City MPG")
+piecewiseConstantFit(dat$Horsepower,dat$City_MPG,2, TRUE)
+piecewiseConstantFit(dat$Horsepower,dat$City_MPG,3, TRUE)
+piecewiseConstantFit(dat$Horsepower,dat$City_MPG,4, TRUE)
+legend(435, 60, legend=c("L = 2", "L = 3", "L = 4"),
+       col=c("blue", "green", "red"),
+       lty=1, cex=0.8, box.lty = 0, bg='lightgrey')
+
+
+```
+### Inference of Question 2b
+Note: For intervals with no data points, we have interpolated the previous regression line.
+
+We observe that as the number of partitioning intervals increase, we have more regressions for smaller intervals which improves the fit of the model to the data. With more intervals, the variance increases while the bias decreases.
+
+More intervals allow the model to capture local variations in the data and better approximate the true function, thus reducing bias. However, with more intervals, the model can over-fit the data and adapt to noise, resulting in higher variance in the predictions.
+
+
+
+
